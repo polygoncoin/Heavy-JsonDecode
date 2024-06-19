@@ -114,20 +114,27 @@ class JsonDecode
      * 
      * @return void
      */
-    public function __construct()
+    public function __construct($fileLocation = null)
     {
-        $inputStream = fopen('php://input', "rb");
-        fread($inputStream, (strlen($this->payloadKey) + 1));
+        if (is_null($fileLocation)) {
+            $inputStream = fopen('php://input', "rb");
+            fread($inputStream, (strlen($this->payloadKey) + 1));    
 
-        stream_filter_register("urldecode", "UrlDecodeFilter") or die("Failed to register filter");
-        stream_filter_append($inputStream, "urldecode");
-        
-        $this->tempStream = fopen("php://memory", "rw+b");
-        fwrite($this->tempStream, '{"' . $this->payloadKey . '":');
-        stream_copy_to_stream($inputStream, $this->tempStream);
-        fwrite($this->tempStream, '}');
-        
-        fclose($inputStream);
+            stream_filter_register("urldecode", "UrlDecodeFilter") or die("Failed to register filter");
+            stream_filter_append($inputStream, "urldecode");
+
+            $this->tempStream = fopen("php://memory", "rw+b");
+            fwrite($this->tempStream, '{"' . $this->payloadKey . '":');
+            stream_copy_to_stream($inputStream, $this->tempStream);
+            fwrite($this->tempStream, '}');
+            
+            fclose($inputStream);
+        } else {
+            if (!file_exists($fileLocation)) {
+                die('Invalid file location');
+            }
+            $this->tempStream = fopen($fileLocation, "rb");
+        }
     }
 
     /**
