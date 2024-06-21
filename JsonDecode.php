@@ -97,6 +97,7 @@ class JsonDecode
 
     /**
      * Paylaod key
+     * Key which contain JSON string from Browser / Postman
      *
      * @var string
      */
@@ -159,19 +160,19 @@ class JsonDecode
     {
         // Flags Variable
         $quote = false;
-        $comma = false;
-        $colon = false;
-        $keyFlag = false;
-        $valueFlag = false;
 
-        // Values Variables
+        // Values inside Quotes
         $keyValue = '';
         $valueValue = '';
-        $replacements = '';
+
+        // Values without Quotes
         $nullStr = null;
 
         // Variable mode - key/value;
         $varMode = 'keyValue';
+
+        $strToEscape  = '';
+        $prevIsEscape = false;
 
         $this->charCounter = $this->_s_ !== null ? $this->_s_ : 0;
         fseek($this->tempStream, $this->charCounter, SEEK_SET);
@@ -186,105 +187,106 @@ class JsonDecode
             )
             ;$this->charCounter++
         ) {
-            //Switch mode to value collection after colon.
-            if ($quote === false && $colon === false && $char === ':') {
-                $colon = true;
-                $keyFlag = false;
-                $valueFlag = true;
-                continue;
-            }
-            // Start or End of Array or Object.
-            if ($quote === false && in_array($char, ['[',']','{','}'])) {
-                $arr = $this->handleOpenClose($char, $keyValue, $nullStr, $index);
-                if ($arr !== false) {
-                    yield $arr['key'] => $arr['value'];
-                }
-                $keyValue = $valueValue = '';
-                $keyFlag = true;
-                $valueFlag = false;
-                $colon = false;
-                continue;
-            }
-            // Start of Key or value inside quote.
-            if ($quote === false && $char === '"') {
-                $quote = true;
-                if ($colon === true) {
-                    $varMode = 'valueValue';
-                    $colon = false;
-                    $comma = false;
-                    $keyFlag = false;
-                    $valueFlag = true;
-                    continue;
-                }
-                if ($colon === false) {
-                    $varMode = 'keyValue';
-                    $keyFlag = true;
-                    $valueFlag = false;
-                    continue;
-                }
-            }
-            // Escaped values.
-            if ($quote === true && $replacements === "\\" && in_array($char, $this->escapers)) {
-                $replacement .= $char;
-                $$varMode .= str_replace($this->replacements, $this->escapers, $replacement);
-                $replacement = '';
-                continue;
-            }
-            // Closing double quotes.
-            if ($quote === true && $char === '"') {
-                $quote = false;
-                $colon = false;
-                if ($valueFlag === true) {
-                    $this->currentObject->objectValues[$keyValue] = $valueValue;
-                    $keyValue = $valueValue = '';
-                    $keyFlag = true;
-                    $valueFlag = false;
-                    $colon = false;
-                    $comma = true;
-                }
-                continue;
-            }
-            // Collect values for key or value.
-            if ($quote === true) {
-                $$varMode .= $char;
-                continue;
-            }
-            // Check for null values.
-            if ($quote === false) {
-                if ($char === ',') {
-                    if (!is_null($nullStr)) {
-                        $nullStr = $this->checkNullStr($nullStr);
-                        switch ($this->currentObject->mode) {
-                            case 'Array':
-                                $this->currentObject->arrayValues[] = $nullStr;
-                                if (is_null($this->currentObject->arrayKey)) {
-                                    $this->currentObject->arrayKey = 0;
-                                } else {
-                                    $this->currentObject->arrayKey++;
-                                }
-                                break;
-                            case 'Object':
-                                if (!empty($keyValue)) {
-                                    $this->currentObject->objectValues[$keyValue] = $nullStr;
-                                }
-                                break;
-                        }
-                        $nullStr = null;
-                        $keyValue = $valueValue = '';
-                        $keyFlag = true;
-                        $valueFlag = false;
-                        $colon = false;
-                        $comma = true;
+            switch (true) {
+                case $quote === false:
+                    switch (true) {
+                        // Start of Key or value inside quote.
+                        case $char === '"':
+                            $quote = true;
+                            $nullStr = '';
+                            break;
+
+                        //Switch mode to value collection after colon.
+                        case $char === ':':
+                            $varMode = 'valueValue';
+                            break;
+
+                        // Start or End of Array or Object.
+                        case in_array($char, ['[',']','{','}']):
+                            $arr = $this->handleOpenClose($char, $keyValue, $nullStr, $index);
+                            if ($arr !== false) {
+                                yield $arr['key'] => $arr['value'];
+                            }
+                            $keyValue = $valueValue = '';
+                            $varMode = 'keyValue';
+                            break;
+                    
+                        // Check for null values.
+                        case $char === ',' && !is_null($nullStr):
+                            $nullStr = $this->checkNullStr($nullStr);
+                            switch ($this->currentObject->mode) {
+                                case 'Array':
+                                    $this->currentObject->arrayValues[] = $nullStr;
+                                    break;
+                                case 'Object':
+                                    if (!empty($keyValue)) {
+                                        $this->currentObject->objectValues[$keyValue] = $nullStr;
+                                    }
+                                    break;
+                            }
+                            $nullStr = null;
+                            $keyValue = $valueValue = '';
+                            $varMode = 'keyValue';
+                            break;
+
+                        //Switch mode to value collection after colon.
+                        case in_array($char, $this->escapers):
+                            break;
+
+                        // Append char to null string.
+                        case !in_array($char, $this->escapers):
+                            $nullStr .= $char;
+                            break;
                     }
-                } else {
-                    if (!in_array($char, $this->escapers)) {
-                        $nullStr .= $char;
+                    break;
+            
+                case $quote === true:
+                    switch (true) {
+                        // Collect string to be escaped
+                        case $varMode === 'valueValue' && ($char === '\\' || ($prevIsEscape && in_array($strToEscape . $char , $this->replacements))):
+                            $strToEscape .= $char;
+                            $prevIsEscape = true;
+                            break;
+
+                        // Escape value with char
+                        case $varMode === 'valueValue' && $prevIsEscape === true && in_array($strToEscape . $char , $this->replacements):
+                            $$varMode .= str_replace($this->replacements, $this->escapers, $strToEscape . $char);
+                            $strToEscape = '';
+                            $prevIsEscape = false;
+                            break;
+
+                        // Escape value without char
+                        case $varMode === 'valueValue' && $prevIsEscape === true && in_array($strToEscape , $this->replacements):
+                            $$varMode .= str_replace($this->replacements, $this->escapers, $strToEscape) . $char;
+                            $strToEscape = '';
+                            $prevIsEscape = false;
+                            break;
+
+                        // Closing double quotes.
+                        case $char === '"':
+                            $quote = false;
+                            switch (true) {
+                                // Closing qoute of Key
+                                case $varMode === 'keyValue':
+                                    $varMode = 'valueValue';
+                                    break;
+                                
+                                // Closing qoute of Value
+                                case $varMode === 'valueValue':
+                                    $this->currentObject->objectValues[$keyValue] = $valueValue;
+                                    $keyValue = $valueValue = '';
+                                    $varMode = 'keyValue';
+                                    break;
+                            }
+                            break;
+
+                        // Collect values for key or value.
+                        default:
+                            $$varMode .= $char;
                     }
-                }
-                continue;
+                    break;
             }
         }
-
         $this->objects = [];
         $this->currentObject = null;
         $this->previousObjectIndex = null;
@@ -299,7 +301,7 @@ class JsonDecode
      * @param bool   $index    Index output.
      * @return array
      */
-    private function handleOpenClose(&$char, &$keyValue, &$nullStr, &$index)
+    private function handleOpenClose($char, $keyValue, $nullStr, $index)
     {
         $arr = false;
         switch ($char) {
@@ -701,8 +703,7 @@ class JsonDecode
             if (isset($streamIndex[$key])) {
                 $streamIndex = &$streamIndex[$key];
             } else {
-                HttpResponse::return4xx(501, "Invalid key {$key}");
-                return;
+                die("Invalid key {$key}");
             }
         }
         $return = 'Object';
@@ -731,8 +732,7 @@ class JsonDecode
             if (isset($streamIndex[$key])) {
                 $streamIndex = &$streamIndex[$key];
             } else {
-                HttpResponse::return4xx(501, "Invalid key {$key}");
-                return;
+                die("Invalid key {$key}");
             }
         }
         if (
@@ -761,8 +761,7 @@ class JsonDecode
             if (isset($streamIndex[$key])) {
                 $streamIndex = &$streamIndex[$key];
             } else {
-                HttpResponse::return4xx(501, "Invalid key {$key}");
-                return;
+                die("Invalid key {$key}");
             }
         }
         if (
@@ -800,8 +799,7 @@ class JsonDecode
             if (isset($streamIndex[$key])) {
                 $streamIndex = &$streamIndex[$key];
             } else {
-                HttpResponse::return4xx(501, "Invalid key {$key}");
-                return;
+                die("Invalid key {$key}");
             }
         }
         if (
