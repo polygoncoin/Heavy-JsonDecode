@@ -1,11 +1,11 @@
 <?php
 /**
- * Creates Objects from JSON String.
+ * Creates Arrays from JSON String
  *
  * This class is built to decode large json string or file
  * (which leads to memory limit issues for larger data set)
  * This class gives access to create obects from JSON string
- * in parts for what ever smallest part of data.
+ * in parts for what ever smallest part of data
  *
  * @category   JSON
  * @package    JSON Decoder
@@ -17,125 +17,59 @@
 class JsonDecode
 {
     /**
-     * Temporary Stream
+     * Json Stream Handle
      *
      * @var object
      */
-    private $tempStream = null;
+    private $jsonStreamHandle = null;
 
     /**
-     * Array of JsonEncodeObject objects
+     * JSON stream indexes
+     * Contains start and end positions for requested indexes
      *
      * @var array
      */
-    private $objects = [];
-
-    /**
-     * Parent JsonEncodeObject object
-     *
-     * @var object
-     */
-    private $previousObjectIndex = null;
-
-    /**
-     * Current JsonEncodeObject object
-     *
-     * @var object
-     */
-    private $currentObject = null;
-
-    /**
-     * Characters that are escaped while creating JSON.
-     *
-     * @var array
-     */
-    private $escapers = array("\\", "/", "\"", "\n", "\r", "\t", "\x08", "\x0c", ' ');
-
-    /**
-     * Characters that are escaped with for $escapers while creating JSON.
-     *
-     * @var array
-     */
-    private $replacements = array("\\\\", "\\/", "\\\"", "\\n", "\\r", "\\t", "\\f", "\\b", ' ');
-
-    /**
-     * JSON stream indexes.
-     * Contains start and end positions for requested indexes.
-     *
-     * @var array
-     */
-    public $streamIndex = null;
-
-    /**
-     * JSON stream keys seperated by colon.
-     *
-     * @var string
-     */
-    private $keys = null;
-
-    /**
-     * JSON stream start position.
-     *
-     * @var integer
-     */
-    private $_s_ = null;
-
-    /**
-     * JSON stream end position.
-     *
-     * @var integer
-     */
-    private $_e_ = null;
-
-    /**
-     * JSON char counter.
-     * Starts from $_s_ till $_e_
-     *
-     * @var integer
-     */
-    private $charCounter = null;
-
-    /**
-     * Paylaod key
-     * Key which contain JSON string from Browser / Postman
-     *
-     * @var string
-     */
-    private $payloadKey = 'Payload';
+    public $jsonStreamIndex = null;
 
     /**
      * Allowed Paylaod length
      *
      * @var integer
      */
-    private $allowedPayloadLength = 10 * 1024 * 1024; // 10 MB
+    private $allowedPayloadLength = 100 * 1024 * 1024; // 100 MB
+
+    /**
+     * Json Decode Engine Object
+     *
+     * @var object
+     */
+    private $jsonDecodeEngine = null;
 
     /**
      * JsonEncode constructor
      * 
+     * @param string $filepath
      * @return void
      */
-    public function __construct($fileLocation = null)
+    public function __construct($filepath = null)
     {
-        if (is_null($fileLocation)) {
+        // Init Input stream
+        if (is_null($filepath)) {
             $inputStream = fopen('php://input', "rb");
-            fread($inputStream, (strlen($this->payloadKey) + 1));    
-
-            stream_filter_register("urldecode", "UrlDecodeFilter") or die("Failed to register filter");
-            stream_filter_append($inputStream, "urldecode");
-
-            $this->tempStream = fopen("php://memory", "rw+b");
-            fwrite($this->tempStream, '{"' . $this->payloadKey . '":');
-            stream_copy_to_stream($inputStream, $this->tempStream);
-            fwrite($this->tempStream, '}');
-            
-            fclose($inputStream);
         } else {
-            if (!file_exists($fileLocation)) {
+            if (!file_exists($filepath)) {
                 die('Invalid file location');
             }
-            $this->tempStream = fopen($fileLocation, "rb");
+            $inputStream = fopen($filepath, "rw+b");
         }
+
+        // Create Json Stream Handle
+        $this->jsonStreamHandle = fopen("php://temp", "rw+b");
+        stream_copy_to_stream($inputStream, $this->jsonStreamHandle, $this->allowedPayloadLength);
+        fclose($inputStream);
+
+        // Init Json Decode Engine
+        $this->jsonDecodeEngine = new JsonDecodeEngine($this->jsonStreamHandle);
     }
 
     /**
@@ -145,15 +79,247 @@ class JsonDecode
      */
     public function validate()
     {
-        foreach($this->process() as $keyArr => $valueArr) {
+        foreach($this->jsonDecodeEngine->process() as $keyArr => $valueArr) {
             ;
         }
     }
 
     /**
+     * Index stream JSON
+     *
+     * @return void
+     */
+    public function indexJson()
+    {
+        $this->jsonStreamIndex = null;
+        foreach ($this->jsonDecodeEngine->process(true) as $keys => $val) {
+            if (
+                isset($val['_s_']) &&
+                isset($val['_e_'])
+            ) {
+                $jsonStreamIndex = &$this->jsonStreamIndex;
+                for ($i=0, $iCount = count($keys); $i < $iCount; $i++) {
+                    if (is_numeric($keys[$i]) && !isset($jsonStreamIndex[$keys[$i]])) {
+                        $jsonStreamIndex[$keys[$i]] = [];
+                        if (!isset($jsonStreamIndex['_c_'])) {
+                            $jsonStreamIndex['_c_'] = 0;
+                        }
+                        if (is_numeric($keys[$i])) {
+                            $jsonStreamIndex['_c_']++;
+                        }
+                    }
+                    $jsonStreamIndex = &$jsonStreamIndex[$keys[$i]];
+                }
+                $jsonStreamIndex['_s_'] = $val['_s_'];
+                $jsonStreamIndex['_e_'] = $val['_e_'];
+            }
+        }
+    }
+
+    /**
+     * Keys exist
+     *
+     * @param string $keys Keys exist (values seperated by colon)
+     * @return boolean
+     */
+    public function isset($keys)
+    {
+        $return = true;
+        $jsonStreamIndex = &$this->jsonStreamIndex;
+        foreach (explode(':', $keys) as $key) {
+            if (isset($jsonStreamIndex[$key])) {
+                $jsonStreamIndex = &$jsonStreamIndex[$key];
+            } else {
+                $return = false;
+                break;
+            }
+        }
+        return $return;
+    }
+
+    /**
+     * Key exist
+     *
+     * @param string $keys Key values seperated by colon
+     * @return string
+     */
+    public function jsonType($keys)
+    {
+        $jsonStreamIndex = &$this->jsonStreamIndex;
+        foreach (explode(':', $keys) as $key) {
+            if (isset($jsonStreamIndex[$key])) {
+                $jsonStreamIndex = &$jsonStreamIndex[$key];
+            } else {
+                die("Invalid key {$key}");
+            }
+        }
+        $return = 'Object';
+        if (
+            (
+                isset($jsonStreamIndex['_s_']) &&
+                isset($jsonStreamIndex['_e_']) &&
+                isset($jsonStreamIndex['_c_'])
+            )
+        ) {
+            $return = 'Array';
+        }
+        return $return;
+    }
+
+    /**
+     * Count of array element
+     *
+     * @param string $keys Key values seperated by colon
+     * @return integer
+     */
+    public function count($keys)
+    {
+        $jsonStreamIndex = &$this->jsonStreamIndex;
+        foreach (explode(':', $keys) as $key) {
+            if (isset($jsonStreamIndex[$key])) {
+                $jsonStreamIndex = &$jsonStreamIndex[$key];
+            } else {
+                die("Invalid key {$key}");
+            }
+        }
+        if (
+            !(
+                isset($jsonStreamIndex['_s_']) &&
+                isset($jsonStreamIndex['_e_']) &&
+                isset($jsonStreamIndex['_c_'])
+            )
+        ) {
+            return 0;
+        }
+        return $jsonStreamIndex['_c_'];
+    }
+
+    /**
+     * Pass the keys and get whole json content belonging to keys
+     *
+     * @param string $keys Key values seperated by colon
+     * @return array
+     */
+    public function get($keys)
+    {
+        $jsonStreamIndex = &$this->jsonStreamIndex;
+        foreach (explode(':', $keys) as $key) {
+            if (isset($jsonStreamIndex[$key])) {
+                $jsonStreamIndex = &$jsonStreamIndex[$key];
+            } else {
+                die("Invalid key {$key}");
+            }
+        }
+        if (
+            isset($jsonStreamIndex['_s_']) &&
+            isset($jsonStreamIndex['_e_'])
+        ) {
+            $start = $jsonStreamIndex['_s_'];
+            $end = $jsonStreamIndex['_e_'];
+        } else {
+            die("Invalid keys '{$keys}'");
+        }
+        $length = $end - $start + 1;
+        $json = stream_get_contents($this->jsonStreamHandle, $length, $start);
+        return json_decode($json, true);
+    }
+}
+
+/**
+ * Creates Arrays from JSON String
+ *
+ * This class is built to decode large json string or file
+ * (which leads to memory limit issues for larger data set)
+ * This class gives access to create obects from JSON string
+ * in parts for what ever smallest part of data
+ *
+ * @category   JSON
+ * @package    JSON Decode Engine
+ * @author     Ramesh Narayan Jangid
+ * @copyright  Ramesh Narayan Jangid
+ * @version    Release: @1.0.0@
+ * @since      Class available since Release 1.0.0
+ */
+class JsonDecodeEngine
+{
+    /**
+     * Stream Handle
+     *
+     * @var object
+     */
+    private $jsonStreamHandle = null;
+
+    /**
+     * Array of JsonEncodeObject objects
+     *
+     * @var array
+     */
+    private $objects = [];
+
+    /**
+     * Current JsonEncodeObject object
+     *
+     * @var object
+     */
+    private $currentObject = null;
+
+    /**
+     * Characters that are escaped while creating JSON
+     *
+     * @var array
+     */
+    private $escapers = array("\\", "/", "\"", "\n", "\r", "\t", "\x08", "\x0c", ' ');
+
+    /**
+     * Characters that are escaped with for $escapers while creating JSON
+     *
+     * @var array
+     */
+    private $replacements = array("\\\\", "\\/", "\\\"", "\\n", "\\r", "\\t", "\\f", "\\b", ' ');
+
+    /**
+     * JSON stream keys seperated by colon
+     *
+     * @var string
+     */
+    public $keys = null;
+
+    /**
+     * JSON stream start position
+     *
+     * @var integer
+     */
+    public $_s_ = null;
+
+    /**
+     * JSON stream end position
+     *
+     * @var integer
+     */
+    public $_e_ = null;
+
+    /**
+     * JSON char counter
+     * Starts from $_s_ till $_e_
+     *
+     * @var integer
+     */
+    private $charCounter = null;
+
+    /**
+     * JsonEncode constructor
+     * 
+     * @return void
+     */
+    public function __construct(&$jsonStreamHandle)
+    {
+        $this->jsonStreamHandle = &$jsonStreamHandle;
+    }
+
+    /**
      * Start processing the JSON string
      *
-     * @param bool $index Index output.
+     * @param bool $index Index output
      * @return void
      */
     public function process($index = false)
@@ -175,11 +341,11 @@ class JsonDecode
         $prevIsEscape = false;
 
         $this->charCounter = $this->_s_ !== null ? $this->_s_ : 0;
-        fseek($this->tempStream, $this->charCounter, SEEK_SET);
+        fseek($this->jsonStreamHandle, $this->charCounter, SEEK_SET);
         
         for(;
             (
-                ($char = fgetc($this->tempStream)) !== false && 
+                ($char = fgetc($this->jsonStreamHandle)) !== false && 
                 (
                     ($this->_e_ === null) ||
                     ($this->_e_ !== null && $this->charCounter <= $this->_e_)
@@ -190,18 +356,18 @@ class JsonDecode
             switch (true) {
                 case $quote === false:
                     switch (true) {
-                        // Start of Key or value inside quote.
+                        // Start of Key or value inside quote
                         case $char === '"':
                             $quote = true;
                             $nullStr = '';
                             break;
 
-                        //Switch mode to value collection after colon.
+                        //Switch mode to value collection after colon
                         case $char === ':':
                             $varMode = 'valueValue';
                             break;
 
-                        // Start or End of Array or Object.
+                        // Start or End of Array
                         case in_array($char, ['[',']','{','}']):
                             $arr = $this->handleOpenClose($char, $keyValue, $nullStr, $index);
                             if ($arr !== false) {
@@ -211,16 +377,16 @@ class JsonDecode
                             $varMode = 'keyValue';
                             break;
                     
-                        // Check for null values.
+                        // Check for null values
                         case $char === ',' && !is_null($nullStr):
                             $nullStr = $this->checkNullStr($nullStr);
                             switch ($this->currentObject->mode) {
                                 case 'Array':
                                     $this->currentObject->arrayValues[] = $nullStr;
                                     break;
-                                case 'Object':
+                                case 'Assoc':
                                     if (!empty($keyValue)) {
-                                        $this->currentObject->objectValues[$keyValue] = $nullStr;
+                                        $this->currentObject->assocValues[$keyValue] = $nullStr;
                                     }
                                     break;
                             }
@@ -229,11 +395,11 @@ class JsonDecode
                             $varMode = 'keyValue';
                             break;
 
-                        //Switch mode to value collection after colon.
+                        //Switch mode to value collection after colon
                         case in_array($char, $this->escapers):
                             break;
 
-                        // Append char to null string.
+                        // Append char to null string
                         case !in_array($char, $this->escapers):
                             $nullStr .= $char;
                             break;
@@ -262,7 +428,7 @@ class JsonDecode
                             $prevIsEscape = false;
                             break;
 
-                        // Closing double quotes.
+                        // Closing double quotes
                         case $char === '"':
                             $quote = false;
                             switch (true) {
@@ -273,14 +439,14 @@ class JsonDecode
                                 
                                 // Closing qoute of Value
                                 case $varMode === 'valueValue':
-                                    $this->currentObject->objectValues[$keyValue] = $valueValue;
+                                    $this->currentObject->assocValues[$keyValue] = $valueValue;
                                     $keyValue = $valueValue = '';
                                     $varMode = 'keyValue';
                                     break;
                             }
                             break;
 
-                        // Collect values for key or value.
+                        // Collect values for key or value
                         default:
                             $$varMode .= $char;
                     }
@@ -289,16 +455,15 @@ class JsonDecode
         }
         $this->objects = [];
         $this->currentObject = null;
-        $this->previousObjectIndex = null;
     }
 
     /**
      * Handles array / object open close char
      *
-     * @param string $char     Character among any one "[" "]" "{" "}".
-     * @param string $keyValue String value of key of an object.
-     * @param string $nullStr  String present in JSON without double quotes.
-     * @param bool   $index    Index output.
+     * @param string $char     Character among any one "[" "]" "{" "}"
+     * @param string $keyValue String value of key of an object
+     * @param string $nullStr  String present in JSON without double quotes
+     * @param bool   $index    Index output
      * @return array
      */
     private function handleOpenClose($char, $keyValue, $nullStr, $index)
@@ -308,22 +473,22 @@ class JsonDecode
             case '[':
                 if (!$index) {
                     $arr = [
-                        'key' => $this->keys($index),
+                        'key' => $this->getKeys($index),
                         'value' => $this->getObjectValues()
                     ];
                 }
-                $this->startArray($keyValue);
                 $this->increment();
+                $this->startArray($keyValue);
                 break;
             case '{':
                 if (!$index) {
                     $arr = [
-                        'key' => $this->keys($index),
+                        'key' => $this->getKeys($index),
                         'value' => $this->getObjectValues()
                     ];
                 }
-                $this->startObject($keyValue);
                 $this->increment();
+                $this->startObject($keyValue);
                 break;
             case ']':
                 if (!empty($keyValue)) {
@@ -336,7 +501,7 @@ class JsonDecode
                 }
                 if ($index) {
                     $arr = [
-                        'key' => $this->keys($index),
+                        'key' => $this->getKeys($index),
                         'value' => [
                             '_s_' => $this->currentObject->_s_,
                             '_e_' => $this->charCounter
@@ -345,37 +510,37 @@ class JsonDecode
                 } else {
                     if (!empty($this->currentObject->arrayValues)) {
                         $arr = [
-                            'key' => $this->keys(),
+                            'key' => $this->getKeys(),
                             'value' => $this->currentObject->arrayValues
                         ];    
                     }
                 }
-                $this->currentObject->arrayValues = [];
-                $this->endArray();
+                $this->currentObject = null;
+                $this->popPreviousObject();
                 break;
             case '}':
                 if (!empty($keyValue) && !empty($nullStr)) {
                     $nullStr = $this->checkNullStr($nullStr);
-                    $this->currentObject->objectValues[$keyValue] = $nullStr;
+                    $this->currentObject->assocValues[$keyValue] = $nullStr;
                 }
                 if ($index) {
                     $arr = [
-                        'key' => $this->keys($index),
+                        'key' => $this->getKeys($index),
                         'value' => [
                             '_s_' => $this->currentObject->_s_,
                             '_e_' => $this->charCounter
                         ]
                     ];
                 } else {
-                    if (!empty($this->currentObject->objectValues)) {
+                    if (!empty($this->currentObject->assocValues)) {
                         $arr = [
-                            'key' => $this->keys(),
-                            'value' => $this->currentObject->objectValues
+                            'key' => $this->getKeys(),
+                            'value' => $this->currentObject->assocValues
                         ];    
                     }
                 }
-                $this->currentObject->objectValues = [];
-                $this->endObject();
+                $this->currentObject = null;
+                $this->popPreviousObject();
                 break;
         }
         if (
@@ -393,7 +558,7 @@ class JsonDecode
     /**
      * Check String present in JSON without double quotes for null or integer
      *
-     * @param string $nullStr String present in JSON without double quotes.
+     * @param string $nullStr String present in JSON without double quotes
      * @return mixed
      */
     private function checkNullStr($nullStr)
@@ -413,51 +578,27 @@ class JsonDecode
     /**
      * Start of array
      *
-     * @param string $key Used while creating simple array inside an objectiative array and $key is the key.
+     * @param string $key Used while creating simple array inside an objectiative array and $key is the key
      * @return void
      */
     private function startArray($key = null)
     {
         $this->pushCurrentObject($key);
-        $this->setPreviousObjectIndex();
         $this->currentObject = new JsonDecodeObject('Array', $key);
         $this->currentObject->_s_ = $this->charCounter;
     }
 
     /**
-     * End of array
-     *
-     * @return void
-     */
-    private function endArray()
-    {
-        $this->popCurrentObject();
-        $this->setPreviousObjectIndex();
-    }
-
-    /**
      * Start of object
      *
-     * @param string $key Used while creating objectiative array inside an objectiative array and $key is the key.
-     * @return void
+     * @param string $key Used while creating objectiative array inside an objectiative array and $key is the key
+     * @return void-
      */
     private function startObject($key = null)
     {
         $this->pushCurrentObject($key);
-        $this->setPreviousObjectIndex();
-        $this->currentObject = new JsonDecodeObject('Object', $key);
+        $this->currentObject = new JsonDecodeObject('Assoc', $key);
         $this->currentObject->_s_ = $this->charCounter;
-    }
-
-    /**
-     * End of object
-     *
-     * @return void
-     */
-    private function endObject()
-    {
-        $this->popCurrentObject();
-        $this->setPreviousObjectIndex();
     }
 
     /**
@@ -468,42 +609,27 @@ class JsonDecode
     private function pushCurrentObject($key)
     {
         if ($this->currentObject) {
-            if ($this->currentObject->mode === 'Object' && empty(trim($key))) {
+            if ($this->currentObject->mode === 'Assoc' && (is_null($key) || empty(trim($key)))) {
                 $this->isBadJson($key);
             }
-            if ($this->currentObject->mode === 'Array' && !empty(trim($key))) {
+            if ($this->currentObject->mode === 'Array' && (is_null($key) || empty(trim($key)))) {
                 $this->isBadJson($key);
             }
             array_push($this->objects, $this->currentObject);
-            $this->currentObject = null;
         }
     }
 
     /**
-     * Pop current object
+     * Pop Previous object
      *
      * @return void
      */
-    private function popCurrentObject()
+    private function popPreviousObject()
     {
         if (count($this->objects) > 0) {
             $this->currentObject = array_pop($this->objects);
         } else {
             $this->currentObject = null;
-        }
-    }
-
-    /**
-     * Sets previous object index
-     *
-     * @return void
-     */
-    private function setPreviousObjectIndex()
-    {
-        if (count($this->objects) > 0) {
-            $this->previousObjectIndex = count($this->objects) - 1;
-        } else {
-            $this->previousObjectIndex = null;
         }
     }
 
@@ -515,19 +641,19 @@ class JsonDecode
     private function increment()
     {
         if (
-            !is_null($this->previousObjectIndex) &&
-            $this->objects[$this->previousObjectIndex]->mode === 'Array'
+            !is_null($this->currentObject) &&
+            $this->currentObject->mode === 'Array'
         ) {
-            if (is_null($this->objects[$this->previousObjectIndex]->arrayKey)) {
-                $this->objects[$this->previousObjectIndex]->arrayKey = 0;
+            if (is_null($this->currentObject->arrayKey)) {
+                $this->currentObject->arrayKey = 0;
             } else {
-                $this->objects[$this->previousObjectIndex]->arrayKey++;
+                $this->currentObject->arrayKey++;
             }
         }
     }
 
     /**
-     * Returns extracted object values.
+     * Returns extracted object values
      *
      * @return array
      */
@@ -536,36 +662,35 @@ class JsonDecode
         $arr = false;
         if (
             !is_null($this->currentObject) && 
-            $this->currentObject->mode === 'Object' && 
-            count($this->currentObject->objectValues) > 0
+            $this->currentObject->mode === 'Assoc' && 
+            count($this->currentObject->assocValues) > 0
         ) {
-            $arr = $this->currentObject->objectValues;
-            $this->currentObject->objectValues = [];
+            $arr = $this->currentObject->assocValues;
+            $this->currentObject->assocValues = [];
         }
         return $arr;
     }
 
     /**
-     * Check for a valid JSON.
+     * Check for a valid JSON
      * 
      * @return void
      */
     private function isBadJson($str)
     {
-        $str = trim($str);
+        $str =  !is_null($str) ? trim($str) : $str;
         if (!empty($str)) {
-            echo 'Invalid JSON: ' . $str;
-            die;
+            die("Invalid JSON: {$str}");
         }
     }
 
     /**
-     * Generated Array.
+     * Generated Array
      * 
-     * @param bool $index Index output.
+     * @param bool $index true for normal array / false for associative array
      * @return array
      */
-    private function keys($index = false)
+    private function getKeys($index = false)
     {
         $keys = [];
         $return = &$keys;
@@ -577,25 +702,25 @@ class JsonDecode
         }
         $objCount = count($this->objects);
         if ($objCount > 0) {
-            for ($i=1; $i<$objCount; $i++) {
+            for ($i=0; $i<$objCount; $i++) {
                 switch ($this->objects[$i]->mode) {
-                    case 'Object':
-                        if (!is_null($this->objects[$i]->objectKey)) {
+                    case 'Assoc':
+                        if (!is_null($this->objects[$i]->assocKey)) {
                             if ($index) {
-                                $keys[] = $this->objects[$i]->objectKey;
+                                $keys[] = $this->objects[$i]->assocKey;
                             } else {
-                                $keys[$this->objects[$i]->objectKey] = [];
-                                $keys = &$keys[$this->objects[$i]->objectKey];
+                                $keys[$this->objects[$i]->assocKey] = [];
+                                $keys = &$keys[$this->objects[$i]->assocKey];
                             }
                         }
                         break;
                     case 'Array':
-                        if (!is_null($this->objects[$i]->objectKey)) {
+                        if (!is_null($this->objects[$i]->assocKey)) {
                             if ($index) {
-                                $keys[] = $this->objects[$i]->objectKey;
+                                $keys[] = $this->objects[$i]->assocKey;
                             } else {
-                                $keys[$this->objects[$i]->objectKey] = [];
-                                $keys = &$keys[$this->objects[$i]->objectKey];
+                                $keys[$this->objects[$i]->assocKey] = [];
+                                $keys = &$keys[$this->objects[$i]->assocKey];
                             }
                         }
                         if (!is_null($this->objects[$i]->arrayKey)) {
@@ -612,214 +737,36 @@ class JsonDecode
         }
         if ($this->currentObject) {
             switch ($this->currentObject->mode) {
-                case 'Object':
-                    if (!is_null($this->currentObject->objectKey)) {
+                case 'Assoc':
+                    if (!is_null($this->currentObject->assocKey)) {
                         if ($index) {
-                            $keys[] = $this->currentObject->objectKey;
+                            $keys[] = $this->currentObject->assocKey;
                         } else {
-                            $keys[$this->currentObject->objectKey] = [];
-                            $keys = &$keys[$this->currentObject->objectKey];
+                            $keys[$this->currentObject->assocKey] = [];
+                            $keys = &$keys[$this->currentObject->assocKey];
                         }
                     }
                     break;
                 case 'Array':
-                    if (!is_null($this->currentObject->objectKey)) {
+                    if (!is_null($this->currentObject->assocKey)) {
                         if ($index) {
-                            $keys[] = $this->currentObject->objectKey;
+                            $keys[] = $this->currentObject->assocKey;
                         } else {
-                            $keys[$this->currentObject->objectKey] = [];
-                            $keys = &$keys[$this->currentObject->objectKey];
+                            $keys[$this->currentObject->assocKey] = [];
+                            $keys = &$keys[$this->currentObject->assocKey];
                         }
                     }
                     break;
             }
         }
         return $return;
-    }
-
-    /**
-     * Validate JSON in stream
-     *
-     * @return void
-     */
-    public function indexJSON()
-    {
-        $this->streamIndex = null;
-        foreach ($this->process(true) as $keys => $val) {
-            if (
-                isset($val['_s_']) &&
-                isset($val['_e_'])
-            ) {
-                $streamIndex = &$this->streamIndex;
-                for ($i=0, $iCount = count($keys); $i < $iCount; $i++) {
-                    if (is_numeric($keys[$i]) && !isset($streamIndex[$keys[$i]])) {
-                        $streamIndex[$keys[$i]] = [];
-                        if (!isset($streamIndex['_c_'])) {
-                            $streamIndex['_c_'] = 0;
-                        }
-                        if (is_numeric($keys[$i])) {
-                            $streamIndex['_c_']++;
-                        }
-                    }
-                    $streamIndex = &$streamIndex[$keys[$i]];
-                }
-                $streamIndex['_s_'] = $val['_s_'];
-                $streamIndex['_e_'] = $val['_e_'];
-            }
-        }
-    }
-
-    /**
-     * Key exist.
-     *
-     * @param string $keys Key values seperated by colon.
-     * @return boolean
-     */
-    public function keysAreSet($keys)
-    {
-        $return = true;
-        $streamIndex = &$this->streamIndex;
-        foreach (explode(':', $keys) as $key) {
-            if (isset($streamIndex[$key])) {
-                $streamIndex = &$streamIndex[$key];
-            } else {
-                $return = false;
-                break;
-            }
-        }
-        return $return;
-    }
-
-    /**
-     * Key exist.
-     *
-     * @param string $keys Key values seperated by colon.
-     * @return boolean
-     */
-    public function keysType($keys)
-    {
-        $streamIndex = &$this->streamIndex;
-        foreach (explode(':', $keys) as $key) {
-            if (isset($streamIndex[$key])) {
-                $streamIndex = &$streamIndex[$key];
-            } else {
-                die("Invalid key {$key}");
-            }
-        }
-        $return = 'Object';
-        if (
-            (
-                isset($streamIndex['_s_']) &&
-                isset($streamIndex['_e_']) &&
-                isset($streamIndex['_c_'])
-            )
-        ) {
-            $return = 'Array';
-        }
-        return $return;
-    }
-
-    /**
-     * Get count of array element.
-     *
-     * @param string $keys Key values seperated by colon.
-     * @return integer
-     */
-    public function getCount($keys)
-    {
-        $streamIndex = &$this->streamIndex;
-        foreach (explode(':', $keys) as $key) {
-            if (isset($streamIndex[$key])) {
-                $streamIndex = &$streamIndex[$key];
-            } else {
-                die("Invalid key {$key}");
-            }
-        }
-        if (
-            !(
-                isset($streamIndex['_s_']) &&
-                isset($streamIndex['_e_']) &&
-                isset($streamIndex['_c_'])
-            )
-        ) {
-            echo "Invalid keys '{$keys}'";
-            die;
-        }
-        return $streamIndex['_c_'];
-    }
-
-    /**
-     * Pass the keys and get whole json content belonging to keys.
-     *
-     * @param string $keys Key values seperated by colon.
-     * @return array
-     */
-    public function get($keys)
-    {
-        $streamIndex = &$this->streamIndex;
-        foreach (explode(':', $keys) as $key) {
-            if (isset($streamIndex[$key])) {
-                $streamIndex = &$streamIndex[$key];
-            } else {
-                die("Invalid key {$key}");
-            }
-        }
-        if (
-            isset($streamIndex['_s_']) &&
-            isset($streamIndex['_e_'])
-        ) {
-            $start = $streamIndex['_s_'];
-            $end = $streamIndex['_e_'];
-        } else {
-            echo "Invalid keys '{$keys}'";
-            die;
-        }
-        $length = $end - $start + 1;
-        $json = stream_get_contents($this->tempStream, $length, $start);
-        return json_decode($json, true);
-    }
-
-    /**
-     * Start processing the JSON string for a keys
-     * Perform search inside keys of JSON like $json['data'][0]['data1']
-     *
-     * @param string $keys Key values seperated by colon.
-     * @return void
-     */
-    public function load($keys)
-    {
-        if (empty($keys)) {
-            $this->_s_ = null;
-            $this->_e_ = null;
-            $this->keys = null;
-            return;
-        }
-        $streamIndex = &$this->streamIndex;
-        foreach (explode(':', $keys) as $key) {
-            if (isset($streamIndex[$key])) {
-                $streamIndex = &$streamIndex[$key];
-            } else {
-                die("Invalid key {$key}");
-            }
-        }
-        if (
-            isset($streamIndex['_s_']) &&
-            isset($streamIndex['_e_'])
-        ) {
-            $this->_s_ = $streamIndex['_s_'];
-            $this->_e_ = $streamIndex['_e_'];
-            $this->keys = $keys;
-        } else {
-            echo "Invalid keys '{$keys}'";
-            die;
-        }
     }
 }
 
 /**
  * JSON Object
  *
- * This class is built to help maintain state of an Array or Object of JSON.
+ * This class is built to help maintain state of an Array or Object of JSON
  *
  * @category   JSON
  * @package    Json Decoder
@@ -831,49 +778,49 @@ class JsonDecode
 class JsonDecodeObject
 {
     /**
-     * JSON stream start position.
+     * JSON stream start position
      *
      * @var integer
      */
     public $_s_ = null;
 
     /**
-     * JSON stream end position.
+     * JSON stream end position
      *
      * @var integer
      */
     public $_e_ = null;
     
     /**
-     * Object / Array.
+     * Assoc / Array
      *
      * @var string
      */
     public $mode = '';
 
     /**
-     * Object key for parant object.
+     * Assoc key for parant object
      *
      * @var string
      */
-    public $objectKey = null;
+    public $assocKey = null;
     
     /**
-     * Array key for parant object.
+     * Array key for parant object
      *
      * @var string
      */
     public $arrayKey = null;
 
     /**
-     * Object values.
+     * Object values
      *
      * @var array
      */
-    public $objectValues = [];
+    public $assocValues = [];
 
     /**
-     * Array values.
+     * Array values
      *
      * @var array
      */
@@ -882,37 +829,13 @@ class JsonDecodeObject
     /**
      * Constructor
      *
-     * @param string $mode Values can be one among Array/Object
+     * @param string $mode Values can be one among Array
      */
-    public function __construct($mode, $objectKey = null)
+    public function __construct($mode, $assocKey = null)
     {
         $this->mode = $mode;
-        $objectKey = trim($objectKey);
-        $this->objectKey = !empty($objectKey) ? $objectKey : null;
-    }
-}
 
-/**
- * JSON filter
- *
- * This class is filter url encoded JSON.
- *
- * @category   JSON
- * @package    Url Decode Filter
- * @author     Ramesh Narayan Jangid
- * @copyright  Ramesh Narayan Jangid
- * @version    Release: @1.0.0@
- * @since      Class available since Release 1.0.0
- */
-class UrlDecodeFilter extends \php_user_filter
-{
-    function filter($in, $out, &$consumed, $closing)
-    {
-        while ($bucket = stream_bucket_make_writeable($in)) {
-            $bucket->data = urldecode($bucket->data);
-            $consumed += $bucket->datalen;
-            stream_bucket_append($out, $bucket);
-        }
-        return PSFS_PASS_ON;
+        $assocKey = !is_null($assocKey) ? trim($assocKey) : $assocKey;
+        $this->assocKey = !empty($assocKey) ? $assocKey : null;
     }
 }
