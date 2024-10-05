@@ -31,8 +31,11 @@ PHP JSON Decode large data with lesser resources
     <?php
     require "JsonDecode.php";
     
+    // Creating json file handle
+    $fp = fopen('/usr/local/var/www/rnd/test.json', 'rb');
+
     // Create JsonEncode Object.
-    $JsonDecode = new JsonDecode('/usr/local/var/www/rnd/test.json');
+    $JsonDecode = new JsonDecode($fp);
     $JsonDecode->init();
 
     // Indexing JSON
