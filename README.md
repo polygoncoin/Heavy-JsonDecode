@@ -45,6 +45,7 @@ $JsonDecode->indexJson();
 if ($JsonDecode->isset('data') && $JsonDecode->jsonType('data') === 'Array') {
     for ($i=0, $i_count = $JsonDecode->count('data'); $i < $i_count; $i++) {
         $key = "data:{$i}";
+
         // Row details without Sub arrays
         $row = $JsonDecode->get($key);
         print_r($row);
