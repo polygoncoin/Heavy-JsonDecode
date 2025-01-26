@@ -1,13 +1,13 @@
 # JSON Decode
- 
+
 PHP JSON Decode large data with lesser resources
- 
+
 
 ## Examples
- 
+
 
 ### Validating JSON.
- 
+
 ```PHP
 <?php
 require "JsonDecode.php";
@@ -26,7 +26,7 @@ $jsonDecode = null;
 ```
 
 ### Accessing data of Array after indexing JSON.
- 
+
 ```PHP
 <?php
 require "JsonDecode.php";

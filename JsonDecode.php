@@ -47,7 +47,7 @@ class JsonDecode
 
     /**
      * JsonEncode constructor
-     * 
+     *
      * @param resource $jsonFileHandle
      * @return void
      */
@@ -77,7 +77,7 @@ class JsonDecode
     }
     /**
      * Validates JSON
-     * 
+     *
      * @return void
      */
     public function validate()
@@ -158,7 +158,7 @@ class JsonDecode
                 } else {
                     die("Invalid key {$key}");
                 }
-            }    
+            }
         }
         $return = 'Object';
         if (
@@ -189,7 +189,7 @@ class JsonDecode
                 } else {
                     die("Invalid key {$key}");
                 }
-            }    
+            }
         }
         if (
             !(
@@ -259,7 +259,7 @@ class JsonDecode
                 } else {
                     die("Invalid key {$key}");
                 }
-            }    
+            }
         }
         if (
             isset($jsonFileIndex['_s_']) &&
@@ -349,7 +349,7 @@ class JsonDecodeEngine
 
     /**
      * JsonEncode constructor
-     * 
+     *
      * @param resource $jsonFileHandle
      * @return void
      */
@@ -384,10 +384,10 @@ class JsonDecodeEngine
 
         $this->charCounter = $this->_s_ !== null ? $this->_s_ : 0;
         fseek($this->jsonFileHandle, $this->charCounter, SEEK_SET);
-        
+
         for(;
             (
-                ($char = fgetc($this->jsonFileHandle)) !== false && 
+                ($char = fgetc($this->jsonFileHandle)) !== false &&
                 (
                     ($this->_e_ === null) ||
                     ($this->_e_ !== null && $this->charCounter <= $this->_e_)
@@ -418,7 +418,7 @@ class JsonDecodeEngine
                             $keyValue = $valueValue = '';
                             $varMode = 'keyValue';
                             break;
-                    
+
                         // Check for null values
                         case $char === ',' && !is_null($nullStr):
                             $nullStr = $this->checkNullStr($nullStr);
@@ -447,7 +447,7 @@ class JsonDecodeEngine
                             break;
                     }
                     break;
-            
+
                 case $quote === true:
                     switch (true) {
                         // Collect string to be escaped
@@ -478,7 +478,7 @@ class JsonDecodeEngine
                                 case $varMode === 'keyValue':
                                     $varMode = 'valueValue';
                                     break;
-                                
+
                                 // Closing qoute of Value
                                 case $varMode === 'valueValue':
                                     $this->currentObject->assocValues[$keyValue] = $valueValue;
@@ -568,7 +568,7 @@ class JsonDecodeEngine
                         $arr = [
                             'key' => $this->getKeys(),
                             'value' => $this->currentObject->arrayValues
-                        ];    
+                        ];
                     }
                 }
                 $this->currentObject = null;
@@ -592,7 +592,7 @@ class JsonDecodeEngine
                         $arr = [
                             'key' => $this->getKeys(),
                             'value' => $this->currentObject->assocValues
-                        ];    
+                        ];
                     }
                 }
                 $this->currentObject = null;
@@ -600,10 +600,10 @@ class JsonDecodeEngine
                 break;
         }
         if (
-            $arr !== false && 
+            $arr !== false &&
             !empty($arr) &&
-            isset($arr['value']) && 
-            $arr['value'] !== false && 
+            isset($arr['value']) &&
+            $arr['value'] !== false &&
             count($arr['value']) > 0
         ) {
             return $arr;
@@ -718,8 +718,8 @@ class JsonDecodeEngine
     {
         $arr = false;
         if (
-            !is_null($this->currentObject) && 
-            $this->currentObject->mode === 'Assoc' && 
+            !is_null($this->currentObject) &&
+            $this->currentObject->mode === 'Assoc' &&
             count($this->currentObject->assocValues) > 0
         ) {
             $arr = $this->currentObject->assocValues;
@@ -730,7 +730,7 @@ class JsonDecodeEngine
 
     /**
      * Check for a valid JSON
-     * 
+     *
      * @param string $str
      * @return void
      */
@@ -744,7 +744,7 @@ class JsonDecodeEngine
 
     /**
      * Generated Array
-     * 
+     *
      * @return array
      */
     private function getKeys()
@@ -790,7 +790,7 @@ class JsonDecodeEngine
 
     /**
      * Generated Assoc Array
-     * 
+     *
      * @return array
      */
     private function getAssocKeys()
@@ -867,7 +867,7 @@ class JsonDecodeObject
      * @var null|integer
      */
     public $_e_ = null;
-    
+
     /**
      * Assoc / Array
      *
@@ -881,7 +881,7 @@ class JsonDecodeObject
      * @var null|string
      */
     public $assocKey = null;
-    
+
     /**
      * Array key for parant object
      *
