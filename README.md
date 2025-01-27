@@ -32,7 +32,7 @@ $jsonDecode = null;
 require "JsonDecode.php";
 
 // Creating json file handle
-$fp = fopen('/usr/local/var/www/rnd/test.json', 'rb');
+$fp = fopen('test.json', 'rb');
 
 // Create JsonEncode Object.
 $JsonDecode = new JsonDecode($fp);
