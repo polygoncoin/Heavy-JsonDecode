@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Custom Json Decode
  * php version 7
@@ -11,6 +12,7 @@
  * @link      https://github.com/polygoncoin/Microservices
  * @since     Class available since Release 1.0.0
  */
+
 namespace CustomJsonDecode;
 
 use CustomJsonDecode\JsonDecodeEngine;
@@ -34,7 +36,7 @@ class JsonDecode
      *
      * @var null|resource
      */
-    private $_jsonFileHandle = null;
+    private $jsonFileHandle = null;
 
     /**
      * JSON file indexes
@@ -49,28 +51,29 @@ class JsonDecode
      *
      * @var int
      */
-    private $_allowedPayloadLength = 100 * 1024 * 1024; // 100 MB
+    private $allowedPayloadLength = 100 * 1024 * 1024; // 100 MB
 
     /**
      * Json Decode Engine Object
      *
      * @var null|JsonDecodeEngine
      */
-    private $_jsonDecodeEngine = null;
+    private $jsonDecodeEngine = null;
 
     /**
      * JsonDecode constructor
      *
-     * @param resource $_jsonFileHandle JSON File handle
+     * @param resource $jsonFileHandle JSON File handle
      */
-    public function __construct(&$_jsonFileHandle)
+    public function __construct(&$jsonFileHandle)
     {
-        $this->_jsonFileHandle = &$_jsonFileHandle;
+        $this->jsonFileHandle = &$jsonFileHandle;
 
         // File Stats - Check for size
-        $fileStats = fstat(stream: $this->_jsonFileHandle);
-        if (isset($fileStats['size'])
-            && $fileStats['size'] > $this->_allowedPayloadLength
+        $fileStats = fstat(stream: $this->jsonFileHandle);
+        if (
+            isset($fileStats['size'])
+            && $fileStats['size'] > $this->allowedPayloadLength
         ) {
             die('File size greater than allowed size');
         }
@@ -84,8 +87,8 @@ class JsonDecode
     public function init(): void
     {
         // Init Json Decode Engine
-        $this->_jsonDecodeEngine = new JsonDecodeEngine(
-            _jsonFileHandle: $this->_jsonFileHandle
+        $this->jsonDecodeEngine = new JsonDecodeEngine(
+            _jsonFileHandle: $this->jsonFileHandle
         );
     }
     /**
@@ -95,7 +98,7 @@ class JsonDecode
      */
     public function validate(): void
     {
-        foreach ($this->_jsonDecodeEngine->process() as &$valueArr) {
+        foreach ($this->jsonDecodeEngine->process() as &$valueArr) {
             ;
         }
     }
@@ -108,13 +111,15 @@ class JsonDecode
     public function indexJson(): void
     {
         $this->jsonFileIndex = null;
-        foreach ($this->_jsonDecodeEngine->process(index: true) as $keys => $val) {
-            if (isset($val['_s_'])
+        foreach ($this->jsonDecodeEngine->process(index: true) as $keys => $val) {
+            if (
+                isset($val['_s_'])
                 && isset($val['_e_'])
             ) {
                 $jsonFileIndex = &$this->jsonFileIndex;
-                for ($i=0, $iCount = count(value: $keys); $i < $iCount; $i++) {
-                    if (is_numeric(value: $keys[$i])
+                for ($i = 0, $iCount = count(value: $keys); $i < $iCount; $i++) {
+                    if (
+                        is_numeric(value: $keys[$i])
                         && !isset($jsonFileIndex[$keys[$i]])
                     ) {
                         $jsonFileIndex[$keys[$i]] = [];
@@ -177,9 +182,10 @@ class JsonDecode
             }
         }
         $return = 'Object';
-        if ((isset($jsonFileIndex['_s_'])
+        if (
+            isset($jsonFileIndex['_s_'])
             && isset($jsonFileIndex['_e_'])
-            && isset($jsonFileIndex['_c_']))
+            && isset($jsonFileIndex['_c_'])
         ) {
             $return = 'Array';
         }
@@ -205,7 +211,8 @@ class JsonDecode
                 }
             }
         }
-        if (!(isset($jsonFileIndex['_s_'])
+        if (
+            !(isset($jsonFileIndex['_s_'])
             && isset($jsonFileIndex['_e_'])
             && isset($jsonFileIndex['_c_']))
         ) {
@@ -228,7 +235,7 @@ class JsonDecode
         }
         $valueArr = [];
         $this->load(keys: $keys);
-        foreach ($this->_jsonDecodeEngine->process() as $keyArr => $valueArr) {
+        foreach ($this->jsonDecodeEngine->process() as $keyArr => $valueArr) {
             break;
         }
         return $valueArr;
@@ -248,7 +255,7 @@ class JsonDecode
         }
         $this->load(keys: $keys);
         return json_decode(
-            json: $this->_jsonDecodeEngine->getJsonString(),
+            json: $this->jsonDecodeEngine->getJsonString(),
             associative: true
         );
     }
@@ -265,8 +272,8 @@ class JsonDecode
     public function load($keys): void
     {
         if (empty($keys) && $keys != 0) {
-            $this->_jsonDecodeEngine->startIndex = null;
-            $this->_jsonDecodeEngine->endIndex = null;
+            $this->jsonDecodeEngine->startIndex = null;
+            $this->jsonDecodeEngine->endIndex = null;
             return;
         }
         $jsonFileIndex = &$this->jsonFileIndex;
@@ -279,11 +286,12 @@ class JsonDecode
                 }
             }
         }
-        if (isset($jsonFileIndex['_s_'])
+        if (
+            isset($jsonFileIndex['_s_'])
             && isset($jsonFileIndex['_e_'])
         ) {
-            $this->_jsonDecodeEngine->startIndex = $jsonFileIndex['_s_'];
-            $this->_jsonDecodeEngine->endIndex = $jsonFileIndex['_e_'];
+            $this->jsonDecodeEngine->startIndex = $jsonFileIndex['_s_'];
+            $this->jsonDecodeEngine->endIndex = $jsonFileIndex['_e_'];
         } else {
             throw new \Exception(message: "Invalid keys '{$keys}'", code: 400);
         }

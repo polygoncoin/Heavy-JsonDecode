@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Custom Json Decode
  * php version 7
@@ -11,6 +12,7 @@
  * @link      https://github.com/polygoncoin/Microservices
  * @since     Class available since Release 1.0.0
  */
+
 namespace CustomJsonDecode;
 
 use CustomJsonDecode\JsonDecode;
@@ -34,18 +36,18 @@ class JsonDecoder
      *
      * @var null|JsonDecode
      */
-    static public $jsonDecodeObj = null;
+    public static $jsonDecodeObj = null;
 
     /**
      * Initialize
      *
-     * @param resource $_jsonFileHandle JSON File handle
+     * @param resource $jsonFileHandle JSON File handle
      *
      * @return void
      */
-    static public function init(&$_jsonFileHandle): void
+    public static function init(&$jsonFileHandle): void
     {
-        self::$jsonDecodeObj = new JsonDecode(_jsonFileHandle: $_jsonFileHandle);
+        self::$jsonDecodeObj = new JsonDecode(_jsonFileHandle: $jsonFileHandle);
     }
 
     /**
@@ -53,7 +55,7 @@ class JsonDecoder
      *
      * @return bool|JsonDecode
      */
-    static public function getObject(): bool|JsonDecode
+    public static function getObject(): bool|JsonDecode
     {
         if (is_null(value: self::$jsonDecodeObj)) {
             return false;

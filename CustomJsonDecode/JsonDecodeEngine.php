@@ -1,4 +1,5 @@
 <?php
+
 /**
  * Custom Json Decode
  * php version 7
@@ -11,6 +12,7 @@
  * @link      https://github.com/polygoncoin/Microservices
  * @since     Class available since Release 1.0.0
  */
+
 namespace CustomJsonDecode;
 
 use CustomJsonDecode\JsonDecodeObject;
@@ -34,37 +36,37 @@ class JsonDecodeEngine
      *
      * @var null|resource
      */
-    private $_jsonFileHandle = null;
+    private $jsonFileHandle = null;
 
     /**
      * Array of JsonDecodeObject _objects
      *
      * @var JsonDecodeObject[]
      */
-    private $_objects = [];
+    private $objects = [];
 
     /**
      * Current JsonDecodeObject object
      *
      * @var null|JsonDecodeObject
      */
-    private $_currentObject = null;
+    private $currentObject = null;
 
     /**
      * Characters that are escaped while creating JSON
      *
      * @var string[]
      */
-    private $_escapers = array(
+    private $escapers = array(
         "\\", "\"", "\n", "\r", "\t", "\x08", "\x0c", ' '
     );
 
     /**
-     * Characters that are escaped with for $_escapers while creating JSON
+     * Characters that are escaped with for $escapers while creating JSON
      *
      * @var string[]
      */
-    private $_replacements = array(
+    private $replacements = array(
         "\\\\", "\\\"", "\\n", "\\r", "\\t", "\\f", "\\b", ' '
     );
 
@@ -88,16 +90,16 @@ class JsonDecodeEngine
      *
      * @var null|int
      */
-    private $_charCounter = null;
+    private $charCounter = null;
 
     /**
      * JsonDecode constructor
      *
-     * @param resource $_jsonFileHandle JSON file handle
+     * @param resource $jsonFileHandle JSON file handle
      */
-    public function __construct(&$_jsonFileHandle)
+    public function __construct(&$jsonFileHandle)
     {
-        $this->_jsonFileHandle = &$_jsonFileHandle;
+        $this->jsonFileHandle = &$jsonFileHandle;
     }
 
     /**
@@ -125,156 +127,158 @@ class JsonDecodeEngine
         $strToEscape  = '';
         $prevIsEscape = false;
 
-        $this->_charCounter = $this->startIndex !== null ? $this->startIndex : 0;
+        $this->charCounter = $this->startIndex !== null ? $this->startIndex : 0;
         fseek(
-            stream: $this->_jsonFileHandle,
-            offset: $this->_charCounter,
+            stream: $this->jsonFileHandle,
+            offset: $this->charCounter,
             whence: SEEK_SET
         );
 
-        for (;
+        for (
+            ;
             (
-                ($char = fgetc(stream: $this->_jsonFileHandle)) !== false &&
+                ($char = fgetc(stream: $this->jsonFileHandle)) !== false &&
                 (
                     ($this->endIndex === null) ||
                     ($this->endIndex !== null
-                        && $this->_charCounter <= $this->endIndex
+                        && $this->charCounter <= $this->endIndex
                     )
                 )
-            )
-            ;$this->_charCounter++
+            );
+            $this->charCounter++
         ) {
             switch (true) {
-            case $quote === false:
-                switch (true) {
-                // Start of Key or value inside quote
-                case $char === '"':
-                    $quote = true;
-                    $nullStr = '';
-                    break;
+                case $quote === false:
+                    switch (true) {
+                        // Start of Key or value inside quote
+                        case $char === '"':
+                            $quote = true;
+                            $nullStr = '';
+                            break;
 
-                //Switch mode to value collection after colon
-                case $char === ':':
-                    $varMode = 'valueValue';
-                    break;
+                        //Switch mode to value collection after colon
+                        case $char === ':':
+                            $varMode = 'valueValue';
+                            break;
 
-                // Start or End of Array
-                case in_array(needle: $char, haystack: ['[',']','{','}']):
-                    $arr = $this->_handleOpenClose(
-                        char: $char,
-                        keyValue: $keyValue,
-                        nullStr: $nullStr,
-                        index: $index
-                    );
-                    if ($arr !== false) {
-                        yield $arr['key'] => $arr['value'];
+                        // Start or End of Array
+                        case in_array(needle: $char, haystack: ['[',']','{','}']):
+                            $arr = $this->handleOpenClose(
+                                char: $char,
+                                keyValue: $keyValue,
+                                nullStr: $nullStr,
+                                index: $index
+                            );
+                            if ($arr !== false) {
+                                yield $arr['key'] => $arr['value'];
+                            }
+                            $keyValue = $valueValue = '';
+                            $varMode = 'keyValue';
+                            break;
+
+                        // Check for null values
+                        case $char === ',' && !is_null(value: $nullStr):
+                            $nullStr = $this->checkNullStr(nullStr: $nullStr);
+                            switch ($this->currentObject->mode) {
+                                case 'Array':
+                                    $this->currentObject->arrayValues[] = $nullStr;
+                                    break;
+                                case 'Assoc':
+                                    if (!empty($keyValue)) {
+                                        $this->currentObject->assocValues[$keyValue] = $nullStr;
+                                    }
+                                    break;
+                            }
+                            $nullStr = null;
+                            $keyValue = $valueValue = '';
+                            $varMode = 'keyValue';
+                            break;
+
+                        //Switch mode to value collection after colon
+                        case in_array(needle: $char, haystack: $this->escapers):
+                            break;
+
+                        // Append char to null string
+                        case !in_array(needle: $char, haystack: $this->escapers):
+                            $nullStr .= $char;
+                            break;
                     }
-                    $keyValue = $valueValue = '';
-                    $varMode = 'keyValue';
                     break;
 
-                // Check for null values
-                case $char === ',' && !is_null(value: $nullStr):
-                    $nullStr = $this->_checkNullStr(nullStr: $nullStr);
-                    switch ($this->_currentObject->mode) {
-                    case 'Array':
-                        $this->_currentObject->arrayValues[] = $nullStr;
-                        break;
-                    case 'Assoc':
-                        if (!empty($keyValue)) {
-                            $this->_currentObject->assocValues[$keyValue] = $nullStr;
-                        }
-                        break;
-                    }
-                    $nullStr = null;
-                    $keyValue = $valueValue = '';
-                    $varMode = 'keyValue';
-                    break;
+                case $quote === true:
+                    switch (true) {
+                        // Collect string to be escaped
+                        case $varMode === 'valueValue'
+                            && ($char === '\\'
+                                || ($prevIsEscape
+                                    && in_array(
+                                        needle: $strToEscape . $char,
+                                        haystack: $this->replacements
+                                    )
+                            )):
+                            $strToEscape .= $char;
+                            $prevIsEscape = true;
+                            break;
 
-                //Switch mode to value collection after colon
-                case in_array(needle: $char, haystack: $this->_escapers):
-                    break;
-
-                // Append char to null string
-                case !in_array(needle: $char, haystack: $this->_escapers):
-                    $nullStr .= $char;
-                    break;
-                }
-                break;
-
-            case $quote === true:
-                switch (true) {
-                // Collect string to be escaped
-                case $varMode === 'valueValue'
-                    && ($char === '\\'
-                        || ($prevIsEscape
+                        // Escape value with char
+                        case $varMode === 'valueValue'
+                            && $prevIsEscape === true
                             && in_array(
                                 needle: $strToEscape . $char,
-                                haystack: $this->_replacements
-                            )
-                    )):
-                    $strToEscape .= $char;
-                    $prevIsEscape = true;
-                    break;
+                                haystack: $this->replacements
+                            ):
+                            $$varMode .= str_replace(
+                                search: $this->replacements,
+                                replace: $this->escapers,
+                                subject: $strToEscape . $char
+                            );
+                            $strToEscape = '';
+                            $prevIsEscape = false;
+                            break;
 
-                // Escape value with char
-                case $varMode === 'valueValue'
-                    && $prevIsEscape === true
-                    && in_array(
-                        needle: $strToEscape . $char,
-                        haystack: $this->_replacements
-                    ):
-                    $$varMode .= str_replace(
-                        search: $this->_replacements,
-                        replace: $this->_escapers,
-                        subject: $strToEscape . $char
-                    );
-                    $strToEscape = '';
-                    $prevIsEscape = false;
-                    break;
+                        // Escape value without char
+                        case $varMode === 'valueValue' && $prevIsEscape === true
+                            && in_array(
+                                needle: $strToEscape,
+                                haystack: $this->replacements
+                            ):
+                            $$varMode .= str_replace(
+                                search: $this->replacements,
+                                replace: $this->escapers,
+                                subject: $strToEscape
+                            ) . $char;
+                            $strToEscape = '';
+                            $prevIsEscape = false;
+                            break;
 
-                // Escape value without char
-                case $varMode === 'valueValue' && $prevIsEscape === true
-                    && in_array(
-                        needle: $strToEscape,
-                        haystack: $this->_replacements
-                    ):
-                    $$varMode .= str_replace(
-                        search: $this->_replacements,
-                        replace: $this->_escapers,
-                        subject: $strToEscape
-                    ) . $char;
-                    $strToEscape = '';
-                    $prevIsEscape = false;
-                    break;
+                        // Closing double quotes
+                        case $char === '"':
+                            $quote = false;
+                            switch (true) {
+                                // Closing quote of Key
+                                case $varMode === 'keyValue':
+                                    $varMode = 'valueValue';
+                                    break;
 
-                // Closing double quotes
-                case $char === '"':
-                    $quote = false;
-                    switch (true) {
-                    // Closing quote of Key
-                    case $varMode === 'keyValue':
-                        $varMode = 'valueValue';
-                        break;
+                                // Closing quote of Value
+                                case $varMode === 'valueValue':
+                                    $this->currentObject->assocValues[$keyValue] = $valueValue;
+                                    $keyValue = $valueValue = '';
+                                    $varMode = 'keyValue';
+                                    break;
+                            }
+                            break;
 
-                    // Closing quote of Value
-                    case $varMode === 'valueValue':
-                        $this->_currentObject->assocValues[$keyValue] = $valueValue;
-                        $keyValue = $valueValue = '';
-                        $varMode = 'keyValue';
-                        break;
+                        // Collect values for key or value
+                        default:
+                            $$varMode .= $char;
                     }
                     break;
-
-                // Collect values for key or value
-                default:
-                    $$varMode .= $char;
-                }
-                break;
             }
+            break;
         }
-        $this->_objects = [];
-        $this->_currentObject = null;
+        $this->objects = [];
+        $this->currentObject = null;
     }
 
     /**
@@ -288,7 +292,7 @@ class JsonDecodeEngine
         $length = $this->endIndex - $offset + 1;
 
         return stream_get_contents(
-            stream: $this->_jsonFileHandle,
+            stream: $this->jsonFileHandle,
             length: $length,
             offset: $offset
         );
@@ -304,84 +308,85 @@ class JsonDecodeEngine
      *
      * @return array|bool
      */
-    private function _handleOpenClose($char, $keyValue, $nullStr, $index): array|bool
+    private function handleOpenClose($char, $keyValue, $nullStr, $index): array|bool
     {
         $arr = false;
         switch ($char) {
-        case '[':
-            if (!$index) {
-                $arr = [
-                    'key' => $this->_getKeys(),
-                    'value' => $this->_getObjectValues()
-                ];
-            }
-            $this->_increment();
-            $this->_startArray(key: $keyValue);
-            break;
-        case '{':
-            if (!$index) {
-                $arr = [
-                    'key' => $this->_getKeys(),
-                    'value' => $this->_getObjectValues()
-                ];
-            }
-            $this->_increment();
-            $this->_startObject(key: $keyValue);
-            break;
-        case ']':
-            if (!empty($keyValue)) {
-                $this->_currentObject->arrayValues[] = $keyValue;
-                if (is_null(value: $this->_currentObject->arrayKey)) {
-                    $this->_currentObject->arrayKey = 0;
+            case '[':
+                if (!$index) {
+                    $arr = [
+                        'key' => $this->getKeys(),
+                        'value' => $this->getObjectValues()
+                    ];
+                }
+                $this->increment();
+                $this->startArray(key: $keyValue);
+                break;
+            case '{':
+                if (!$index) {
+                    $arr = [
+                        'key' => $this->getKeys(),
+                        'value' => $this->getObjectValues()
+                    ];
+                }
+                $this->increment();
+                $this->startObject(key: $keyValue);
+                break;
+            case ']':
+                if (!empty($keyValue)) {
+                    $this->currentObject->arrayValues[] = $keyValue;
+                    if (is_null(value: $this->currentObject->arrayKey)) {
+                        $this->currentObject->arrayKey = 0;
+                    } else {
+                        $this->currentObject->arrayKey++;
+                    }
+                }
+                if ($index) {
+                    $arr = [
+                        'key' => $this->getKeys(),
+                        'value' => [
+                            '_s_' => $this->currentObject->startIndex,
+                            '_e_' => $this->charCounter
+                        ]
+                    ];
                 } else {
-                    $this->_currentObject->arrayKey++;
+                    if (!empty($this->currentObject->arrayValues)) {
+                        $arr = [
+                            'key' => $this->getKeys(),
+                            'value' => $this->currentObject->arrayValues
+                        ];
+                    }
                 }
-            }
-            if ($index) {
-                $arr = [
-                    'key' => $this->_getKeys(),
-                    'value' => [
-                        '_s_' => $this->_currentObject->startIndex,
-                        '_e_' => $this->_charCounter
-                    ]
-                ];
-            } else {
-                if (!empty($this->_currentObject->arrayValues)) {
+                $this->currentObject = null;
+                $this->popPreviousObject();
+                break;
+            case '}':
+                if (!empty($keyValue) && !empty($nullStr)) {
+                    $nullStr = $this->checkNullStr(nullStr: $nullStr);
+                    $this->currentObject->assocValues[$keyValue] = $nullStr;
+                }
+                if ($index) {
                     $arr = [
-                        'key' => $this->_getKeys(),
-                        'value' => $this->_currentObject->arrayValues
+                        'key' => $this->getKeys(),
+                        'value' => [
+                            '_s_' => $this->currentObject->startIndex,
+                            '_e_' => $this->charCounter
+                        ]
                     ];
+                } else {
+                    if (!empty($this->currentObject->assocValues)) {
+                        $arr = [
+                            'key' => $this->getKeys(),
+                            'value' => $this->currentObject->assocValues
+                        ];
+                    }
                 }
-            }
-            $this->_currentObject = null;
-            $this->_popPreviousObject();
-            break;
-        case '}':
-            if (!empty($keyValue) && !empty($nullStr)) {
-                $nullStr = $this->_checkNullStr(nullStr: $nullStr);
-                $this->_currentObject->assocValues[$keyValue] = $nullStr;
-            }
-            if ($index) {
-                $arr = [
-                    'key' => $this->_getKeys(),
-                    'value' => [
-                        '_s_' => $this->_currentObject->startIndex,
-                        '_e_' => $this->_charCounter
-                    ]
-                ];
-            } else {
-                if (!empty($this->_currentObject->assocValues)) {
-                    $arr = [
-                        'key' => $this->_getKeys(),
-                        'value' => $this->_currentObject->assocValues
-                    ];
-                }
-            }
-            $this->_currentObject = null;
-            $this->_popPreviousObject();
-            break;
+                $this->currentObject = null;
+                $this->popPreviousObject();
+                break;
         }
-        if ($arr !== false
+        if (
+            $arr !== false
             && !empty($arr)
             && isset($arr['value'])
             && $arr['value'] !== false
@@ -399,7 +404,7 @@ class JsonDecodeEngine
      *
      * @return bool|int|null
      */
-    private function _checkNullStr($nullStr): bool|int|null
+    private function checkNullStr($nullStr): bool|int|null
     {
         $return = false;
         if ($nullStr === 'null') {
@@ -408,7 +413,7 @@ class JsonDecodeEngine
             $return = (int)$nullStr;
         }
         if ($return === false) {
-            $this->_isBadJson(str: $nullStr);
+            $this->isBadJson(str: $nullStr);
         }
         return $return;
     }
@@ -420,11 +425,11 @@ class JsonDecodeEngine
      *
      * @return void
      */
-    private function _startArray($key = null): void
+    private function startArray($key = null): void
     {
-        $this->_pushCurrentObject(key: $key);
-        $this->_currentObject = new JsonDecodeObject(mode: 'Array', assocKey: $key);
-        $this->_currentObject->startIndex = $this->_charCounter;
+        $this->pushCurrentObject(key: $key);
+        $this->currentObject = new JsonDecodeObject(mode: 'Array', assocKey: $key);
+        $this->currentObject->startIndex = $this->charCounter;
     }
 
     /**
@@ -434,11 +439,11 @@ class JsonDecodeEngine
      *
      * @return void
      */
-    private function _startObject($key = null): void
+    private function startObject($key = null): void
     {
-        $this->_pushCurrentObject(key: $key);
-        $this->_currentObject = new JsonDecodeObject(mode: 'Assoc', assocKey: $key);
-        $this->_currentObject->startIndex = $this->_charCounter;
+        $this->pushCurrentObject(key: $key);
+        $this->currentObject = new JsonDecodeObject(mode: 'Assoc', assocKey: $key);
+        $this->currentObject->startIndex = $this->charCounter;
     }
 
     /**
@@ -448,20 +453,22 @@ class JsonDecodeEngine
      *
      * @return void
      */
-    private function _pushCurrentObject($key): void
+    private function pushCurrentObject($key): void
     {
-        if ($this->_currentObject) {
-            if ($this->_currentObject->mode === 'Assoc'
+        if ($this->currentObject) {
+            if (
+                $this->currentObject->mode === 'Assoc'
                 && (is_null(value: $key) || empty(trim(string: $key)))
             ) {
-                $this->_isBadJson(str: $key);
+                $this->isBadJson(str: $key);
             }
-            if ($this->_currentObject->mode === 'Array'
+            if (
+                $this->currentObject->mode === 'Array'
                 && (is_null(value: $key) || empty(trim(string: $key)))
             ) {
-                $this->_isBadJson(str: $key);
+                $this->isBadJson(str: $key);
             }
-            array_push($this->_objects, $this->_currentObject);
+            array_push($this->objects, $this->currentObject);
         }
     }
 
@@ -470,12 +477,12 @@ class JsonDecodeEngine
      *
      * @return void
      */
-    private function _popPreviousObject(): void
+    private function popPreviousObject(): void
     {
-        if (count(value: $this->_objects) > 0) {
-            $this->_currentObject = array_pop($this->_objects);
+        if (count(value: $this->objects) > 0) {
+            $this->currentObject = array_pop($this->objects);
         } else {
-            $this->_currentObject = null;
+            $this->currentObject = null;
         }
     }
 
@@ -484,15 +491,16 @@ class JsonDecodeEngine
      *
      * @return void
      */
-    private function _increment(): void
+    private function increment(): void
     {
-        if (!is_null(value: $this->_currentObject)
-            && $this->_currentObject->mode === 'Array'
+        if (
+            !is_null(value: $this->currentObject)
+            && $this->currentObject->mode === 'Array'
         ) {
-            if (is_null(value: $this->_currentObject->arrayKey)) {
-                $this->_currentObject->arrayKey = 0;
+            if (is_null(value: $this->currentObject->arrayKey)) {
+                $this->currentObject->arrayKey = 0;
             } else {
-                $this->_currentObject->arrayKey++;
+                $this->currentObject->arrayKey++;
             }
         }
     }
@@ -502,15 +510,16 @@ class JsonDecodeEngine
      *
      * @return array|bool
      */
-    private function _getObjectValues(): array|bool
+    private function getObjectValues(): array|bool
     {
         $arr = false;
-        if (!is_null(value: $this->_currentObject)
-            && $this->_currentObject->mode === 'Assoc'
-            && count(value: $this->_currentObject->assocValues) > 0
+        if (
+            !is_null(value: $this->currentObject)
+            && $this->currentObject->mode === 'Assoc'
+            && count(value: $this->currentObject->assocValues) > 0
         ) {
-            $arr = $this->_currentObject->assocValues;
-            $this->_currentObject->assocValues = [];
+            $arr = $this->currentObject->assocValues;
+            $this->currentObject->assocValues = [];
         }
         return $arr;
     }
@@ -522,7 +531,7 @@ class JsonDecodeEngine
      *
      * @return void
      */
-    private function _isBadJson($str): void
+    private function isBadJson($str): void
     {
         $str =  !is_null(value: $str) ? trim(string: $str) : $str;
         if (!empty($str)) {
@@ -535,42 +544,42 @@ class JsonDecodeEngine
      *
      * @return array
      */
-    private function _getKeys(): array
+    private function getKeys(): array
     {
         $keys = [];
         $return = &$keys;
-        $objCount = count(value: $this->_objects);
+        $objCount = count(value: $this->objects);
         if ($objCount > 0) {
-            for ($i=0; $i<$objCount; $i++) {
-                switch ($this->_objects[$i]->mode) {
-                case 'Assoc':
-                    if (!is_null(value: $this->_objects[$i]->assocKey)) {
-                        $keys[] = $this->_objects[$i]->assocKey;
-                    }
-                    break;
-                case 'Array':
-                    if (!is_null(value: $this->_objects[$i]->assocKey)) {
-                        $keys[] = $this->_objects[$i]->assocKey;
-                    }
-                    if (!is_null(value: $this->_objects[$i]->arrayKey)) {
-                        $keys[] = $this->_objects[$i]->arrayKey;
-                    }
-                    break;
+            for ($i = 0; $i < $objCount; $i++) {
+                switch ($this->objects[$i]->mode) {
+                    case 'Assoc':
+                        if (!is_null(value: $this->objects[$i]->assocKey)) {
+                            $keys[] = $this->objects[$i]->assocKey;
+                        }
+                        break;
+                    case 'Array':
+                        if (!is_null(value: $this->objects[$i]->assocKey)) {
+                            $keys[] = $this->objects[$i]->assocKey;
+                        }
+                        if (!is_null(value: $this->objects[$i]->arrayKey)) {
+                            $keys[] = $this->objects[$i]->arrayKey;
+                        }
+                        break;
                 }
             }
         }
-        if ($this->_currentObject) {
-            switch ($this->_currentObject->mode) {
-            case 'Assoc':
-                if (!is_null(value: $this->_currentObject->assocKey)) {
-                    $keys[] = $this->_currentObject->assocKey;
-                }
-                break;
-            case 'Array':
-                if (!is_null(value: $this->_currentObject->assocKey)) {
-                    $keys[] = $this->_currentObject->assocKey;
-                }
-                break;
+        if ($this->currentObject) {
+            switch ($this->currentObject->mode) {
+                case 'Assoc':
+                    if (!is_null(value: $this->currentObject->assocKey)) {
+                        $keys[] = $this->currentObject->assocKey;
+                    }
+                    break;
+                case 'Array':
+                    if (!is_null(value: $this->currentObject->assocKey)) {
+                        $keys[] = $this->currentObject->assocKey;
+                    }
+                    break;
             }
         }
         return $return;
@@ -581,47 +590,47 @@ class JsonDecodeEngine
      *
      * @return array
      */
-    private function _getAssocKeys(): array
+    private function getAssocKeys(): array
     {
         $keys = [];
         $return = &$keys;
-        $objCount = count(value: $this->_objects);
+        $objCount = count(value: $this->objects);
         if ($objCount > 0) {
-            for ($i=0; $i<$objCount; $i++) {
-                switch ($this->_objects[$i]->mode) {
-                case 'Assoc':
-                    if (!is_null(value: $this->_objects[$i]->assocKey)) {
-                        $keys[$this->_objects[$i]->assocKey] = [];
-                        $keys = &$keys[$this->_objects[$i]->assocKey];
-                    }
-                    break;
-                case 'Array':
-                    if (!is_null(value: $this->_objects[$i]->assocKey)) {
-                        $keys[$this->_objects[$i]->assocKey] = [];
-                        $keys = &$keys[$this->_objects[$i]->assocKey];
-                    }
-                    if (!is_null(value: $this->_objects[$i]->arrayKey)) {
-                        $keys[$this->_objects[$i]->arrayKey] = [];
-                        $keys = &$keys[$this->_objects[$i]->arrayKey];
-                    }
-                    break;
+            for ($i = 0; $i < $objCount; $i++) {
+                switch ($this->objects[$i]->mode) {
+                    case 'Assoc':
+                        if (!is_null(value: $this->objects[$i]->assocKey)) {
+                            $keys[$this->objects[$i]->assocKey] = [];
+                            $keys = &$keys[$this->objects[$i]->assocKey];
+                        }
+                        break;
+                    case 'Array':
+                        if (!is_null(value: $this->objects[$i]->assocKey)) {
+                            $keys[$this->objects[$i]->assocKey] = [];
+                            $keys = &$keys[$this->objects[$i]->assocKey];
+                        }
+                        if (!is_null(value: $this->objects[$i]->arrayKey)) {
+                            $keys[$this->objects[$i]->arrayKey] = [];
+                            $keys = &$keys[$this->objects[$i]->arrayKey];
+                        }
+                        break;
                 }
             }
         }
-        if ($this->_currentObject) {
-            switch ($this->_currentObject->mode) {
-            case 'Assoc':
-                if (!is_null(value: $this->_currentObject->assocKey)) {
-                    $keys[$this->_currentObject->assocKey] = [];
-                    $keys = &$keys[$this->_currentObject->assocKey];
-                }
-                break;
-            case 'Array':
-                if (!is_null(value: $this->_currentObject->assocKey)) {
-                    $keys[$this->_currentObject->assocKey] = [];
-                    $keys = &$keys[$this->_currentObject->assocKey];
-                }
-                break;
+        if ($this->currentObject) {
+            switch ($this->currentObject->mode) {
+                case 'Assoc':
+                    if (!is_null(value: $this->currentObject->assocKey)) {
+                        $keys[$this->currentObject->assocKey] = [];
+                        $keys = &$keys[$this->currentObject->assocKey];
+                    }
+                    break;
+                case 'Array':
+                    if (!is_null(value: $this->currentObject->assocKey)) {
+                        $keys[$this->currentObject->assocKey] = [];
+                        $keys = &$keys[$this->currentObject->assocKey];
+                    }
+                    break;
             }
         }
         return $return;

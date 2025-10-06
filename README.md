@@ -2,15 +2,14 @@
 
 PHP JSON Decode large data with lesser resources
 
-
 ## Examples
-
 
 ### Validating JSON.
 
 ```PHP
 <?php
-require_once __DIR__ . '/Autoload.php';
+
+require_once __DIR__ . '/AutoloadJsonDecode.php';
 
 use CustomJsonDecode\JsonDecoder;
 
@@ -31,7 +30,8 @@ $jsonDecodeObj = null;
 
 ```PHP
 <?php
-require_once __DIR__ . '/Autoload.php';
+
+require_once __DIR__ . '/AutoloadJsonDecode.php';
 
 use CustomJsonDecode\JsonDecoder;
 
@@ -46,8 +46,10 @@ $jsonDecodeObj = JsonDecoder::getObject();
 $jsonDecodeObj->indexJson();
 
 // Transverse across key 'data'
-if ($jsonDecodeObj->isset('data') && $jsonDecodeObj->jsonType('data') === 'Array') {
-    for ($i=0, $i_count = $jsonDecodeObj->count('data'); $i < $i_count; $i++) {
+if (
+    $jsonDecodeObj->isset('data') && $jsonDecodeObj->jsonType('data') === 'Array'
+) {
+    for ($i = 0, $i_count = $jsonDecodeObj->count('data'); $i < $i_count; $i++) {
         $key = "data:{$i}";
 
         // Row details without Sub arrays
