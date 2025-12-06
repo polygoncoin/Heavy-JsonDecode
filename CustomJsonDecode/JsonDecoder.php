@@ -47,7 +47,7 @@ class JsonDecoder
      */
     public static function init(&$jsonFileHandle): void
     {
-        self::$jsonDecodeObj = new JsonDecode(_jsonFileHandle: $jsonFileHandle);
+        self::$jsonDecodeObj = new JsonDecode(jsonFileHandle: $jsonFileHandle);
     }
 
     /**

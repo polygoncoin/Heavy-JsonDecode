@@ -88,7 +88,7 @@ class JsonDecode
     {
         // Init Json Decode Engine
         $this->jsonDecodeEngine = new JsonDecodeEngine(
-            _jsonFileHandle: $this->jsonFileHandle
+            jsonFileHandle: $this->jsonFileHandle
         );
     }
     /**
