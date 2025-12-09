@@ -49,7 +49,7 @@ $jsonDecodeObj->indexJson();
 if (
     $jsonDecodeObj->isset('data') && $jsonDecodeObj->jsonType('data') === 'Array'
 ) {
-    for ($i = 0, $i_count = $jsonDecodeObj->count('data'); $i < $i_count; $i++) {
+    for ($i = 0, $iCount = $jsonDecodeObj->count('data'); $i < $iCount; $i++) {
         $key = "data:{$i}";
 
         // Row details without Sub arrays
