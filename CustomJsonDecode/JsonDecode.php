@@ -61,7 +61,7 @@ class JsonDecode
     private $jsonDecodeEngine = null;
 
     /**
-     * JsonDecode constructor
+     * Constructor
      *
      * @param resource $jsonFileHandle JSON File handle
      */
